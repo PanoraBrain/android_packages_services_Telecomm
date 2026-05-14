@@ -69,7 +69,8 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
         INTENT_FILTER.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
     }
 
-    // If not in a call, BSR won't listen to the Bluetooth stack's HFP on/off messages, since
+    // If not in a call, BSR won't listen to the Bluetooth stack's HFP on/off
+    // messages, since
     // other apps could be turning it on and off. We don't want to interfere.
     private boolean mIsInCall = false;
     private final BluetoothRouteManager mBluetoothRouteManager;
@@ -104,11 +105,9 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
     }
 
     private void handleAudioStateChanged(Intent intent) {
-        int bluetoothHeadsetAudioState =
-                intent.getIntExtra(BluetoothHeadset.EXTRA_STATE,
-                        BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
-        BluetoothDevice device =
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
+        int bluetoothHeadsetAudioState = intent.getIntExtra(BluetoothHeadset.EXTRA_STATE,
+                BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
+        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
         if (device == null) {
             Log.w(LOG_TAG, "Got null device from broadcast. " +
                     "Ignoring.");
@@ -124,8 +123,7 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
         switch (bluetoothHeadsetAudioState) {
             case BluetoothHeadset.STATE_AUDIO_CONNECTED:
                 if (mFeatureFlags.useRefactoredAudioRouteSwitching()) {
-                    CallAudioRouteController audioRouteController =
-                            (CallAudioRouteController) mCallAudioRouteAdapter;
+                    CallAudioRouteController audioRouteController = (CallAudioRouteController) mCallAudioRouteAdapter;
                     audioRouteController.setScoAudioConnectedDevice(device);
                     AudioRoute btRoute = audioRouteController.getBluetoothRoute(
                             AudioRoute.TYPE_BLUETOOTH_SCO, device.getAddress());
@@ -138,12 +136,32 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                         // is sent later, indicating that SCO audio is on. We should route
                         // appropriately in order for the UI to reflect this state.
                         if (btRoute != null) {
-                            audioRouteController.getPendingAudioRoute().overrideDestRoute(btRoute);
-                            audioRouteController.overrideIsPending(true);
-                            audioRouteController.getPendingAudioRoute()
-                                    .setCommunicationDeviceType(AudioRoute.TYPE_BLUETOOTH_SCO);
-                            mCallAudioRouteAdapter.sendMessageWithSessionInfo(
-                                    CallAudioRouteAdapter.EXIT_PENDING_ROUTE);
+                            if (mBluetoothRouteManager.isWatch(device)
+                                && !audioRouteController.isBluetoothDeviceActive(
+                                    AudioRoute.TYPE_BLUETOOTH_SCO, device.getAddress())) {
+                                Log.i(LOG_TAG,
+                                "Watch device connected SCO while inactive. "
+                                    + "Disconnecting SCO and re-asserting current route "
+                                    + "to prevent audio route hijack.");
+                                // Force disconnect the SCO link at the BT stack level.
+                                // Just ignoring at the Telecom level is not enough — the
+                                // actual hardware SCO connection disrupts the Audio HAL's
+                                // earpiece path, causing silent earpiece until the user
+                                // manually switches to speaker.
+                                mBluetoothRouteManager.getDeviceManager().disconnectSco();
+                                // Re-assert the current audio route by forcing a fresh
+                                // setCommunicationDevice call. This recovers the earpiece
+                                // audio path that the brief SCO connection corrupted.
+                                mCallAudioRouteAdapter.sendMessageWithSessionInfo(
+                                        CallAudioRouteAdapter.EXIT_PENDING_ROUTE);
+                            } else {
+                                audioRouteController.getPendingAudioRoute().overrideDestRoute(btRoute);
+                                audioRouteController.overrideIsPending(true);
+                                audioRouteController.getPendingAudioRoute()
+                                        .setCommunicationDeviceType(AudioRoute.TYPE_BLUETOOTH_SCO);
+                                mCallAudioRouteAdapter.sendMessageWithSessionInfo(
+                                        CallAudioRouteAdapter.EXIT_PENDING_ROUTE);
+                            }
                         }
                     }
                 } else {
@@ -156,8 +174,7 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                 break;
             case BluetoothHeadset.STATE_AUDIO_DISCONNECTED:
                 if (mFeatureFlags.useRefactoredAudioRouteSwitching()) {
-                    CallAudioRouteController audioRouteController =
-                            (CallAudioRouteController) mCallAudioRouteAdapter;
+                    CallAudioRouteController audioRouteController = (CallAudioRouteController) mCallAudioRouteAdapter;
                     audioRouteController.setScoAudioConnectedDevice(null);
                     if (audioRouteController.isPending()) {
                         mCallAudioRouteAdapter.sendMessageWithSessionInfo(BT_AUDIO_DISCONNECTED, 0,
@@ -172,7 +189,7 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                         mCallAudioRouteAdapter.sendMessageWithSessionInfo(SWITCH_BASELINE_ROUTE,
                                 INCLUDE_BLUETOOTH_IN_BASELINE, device.getAddress());
                     }
-                }  else {
+                } else {
                     mBluetoothRouteManager.sendMessage(BT_AUDIO_LOST, args);
                 }
                 break;
@@ -182,8 +199,7 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
     private void handleConnectionStateChanged(Intent intent) {
         int bluetoothHeadsetState = intent.getIntExtra(BluetoothHeadset.EXTRA_STATE,
                 BluetoothHeadset.STATE_DISCONNECTED);
-        BluetoothDevice device =
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
+        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
 
         if (device == null) {
             Log.w(LOG_TAG, "Got null device from broadcast. " +
@@ -192,7 +208,8 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
         }
 
         int deviceType;
-        @AudioRoute.AudioRouteType int audioRouteType;
+        @AudioRoute.AudioRouteType
+        int audioRouteType;
         if (BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED.equals(intent.getAction())) {
             deviceType = BluetoothDeviceManager.DEVICE_TYPE_LE_AUDIO;
             audioRouteType = AudioRoute.TYPE_BLUETOOTH_LE;
@@ -236,11 +253,11 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
     }
 
     private void handleActiveDeviceChanged(Intent intent) {
-        BluetoothDevice device =
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
+        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
 
         int deviceType;
-        @AudioRoute.AudioRouteType int audioRouteType;
+        @AudioRoute.AudioRouteType
+        int audioRouteType;
         if (BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED.equals(intent.getAction())) {
             deviceType = BluetoothDeviceManager.DEVICE_TYPE_LE_AUDIO;
             audioRouteType = AudioRoute.TYPE_BLUETOOTH_LE;
@@ -259,8 +276,7 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                 BluetoothDeviceManager.getDeviceTypeString(deviceType));
 
         if (mFeatureFlags.useRefactoredAudioRouteSwitching()) {
-            CallAudioRouteController audioRouteController = (CallAudioRouteController)
-                    mCallAudioRouteAdapter;
+            CallAudioRouteController audioRouteController = (CallAudioRouteController) mCallAudioRouteAdapter;
             if (device == null) {
                 // Update the active device cache immediately.
                 audioRouteController.updateActiveBluetoothDevice(new Pair(audioRouteType, null));
@@ -283,16 +299,8 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                             device.getAddress())) {
                         Log.i(this, "handleActiveDeviceChanged: Failed to set "
                                 + "communication device for %s.", device);
-                        if (!mFeatureFlags.resolveActiveBtRoutingAndBtTimingIssue()) {
-                            Log.i(this, "Sending PENDING_ROUTE_FAILED "
-                                    + "to pending audio route.");
-                            mCallAudioRouteAdapter.getPendingAudioRoute()
-                                    .onMessageReceived(new Pair<>(PENDING_ROUTE_FAILED,
-                                            device.getAddress()), device.getAddress());
-                        } else {
-                            Log.i(this, "Refrain from sending PENDING_ROUTE_FAILED"
-                                    + " to pending audio route.");
-                        }
+                        Log.i(this, "Refrain from sending PENDING_ROUTE_FAILED"
+                                + " to pending audio route.");
                     } else {
                         // Track the currently set communication device.
                         mCallAudioRouteAdapter.getPendingAudioRoute()
@@ -328,27 +336,25 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                         Bundle preferredAudioProfiles = bluetoothAdapter.getPreferredAudioProfiles(
                                 device);
                         if (preferredAudioProfiles != null && !preferredAudioProfiles.isEmpty()
-                                && preferredAudioProfiles.getInt(BluetoothAdapter.AUDIO_MODE_DUPLEX)
-                                != 0) {
+                                && preferredAudioProfiles.getInt(BluetoothAdapter.AUDIO_MODE_DUPLEX) != 0) {
                             Log.i(this, "Preferred duplex profile for device=" + device + " is "
                                     + preferredAudioProfiles.getInt(
-                                    BluetoothAdapter.AUDIO_MODE_DUPLEX));
+                                            BluetoothAdapter.AUDIO_MODE_DUPLEX));
                             usePreferredAudioProfile = true;
-                            preferredDuplexProfile =
-                                    preferredAudioProfiles.getInt(
-                                            BluetoothAdapter.AUDIO_MODE_DUPLEX);
+                            preferredDuplexProfile = preferredAudioProfiles.getInt(
+                                    BluetoothAdapter.AUDIO_MODE_DUPLEX);
                         }
                     }
 
                     if (deviceType == BluetoothDeviceManager.DEVICE_TYPE_LE_AUDIO) {
-                        /* In Le Audio case, once device got Active, the Telecom needs to make sure
+                        /*
+                         * In Le Audio case, once device got Active, the Telecom needs to make sure
                          * it is set as communication device before we can say that BT_AUDIO_IS_ON
                          */
-                        boolean isLeAudioSetForCommunication =
-                                mFeatureFlags.callAudioCommunicationDeviceRefactor()
-                                        ? mCommunicationDeviceTracker.setCommunicationDevice(
+                        boolean isLeAudioSetForCommunication = mFeatureFlags.callAudioCommunicationDeviceRefactor()
+                                ? mCommunicationDeviceTracker.setCommunicationDevice(
                                         AudioDeviceInfo.TYPE_BLE_HEADSET, device)
-                                        : mBluetoothDeviceManager.setLeAudioCommunicationDevice(device);
+                                : mBluetoothDeviceManager.setLeAudioCommunicationDevice(device);
                         if ((!usePreferredAudioProfile
                                 || preferredDuplexProfile == BluetoothProfile.LE_AUDIO)
                                 && !isLeAudioSetForCommunication) {
@@ -357,11 +363,10 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
                                     device);
                         }
                     } else {
-                        boolean isHearingAidSetForCommunication =
-                                mFeatureFlags.callAudioCommunicationDeviceRefactor()
-                                        ? mCommunicationDeviceTracker.setCommunicationDevice(
+                        boolean isHearingAidSetForCommunication = mFeatureFlags.callAudioCommunicationDeviceRefactor()
+                                ? mCommunicationDeviceTracker.setCommunicationDevice(
                                         AudioDeviceInfo.TYPE_HEARING_AID, null)
-                                        : mBluetoothDeviceManager
+                                : mBluetoothDeviceManager
                                         .setHearingAidCommunicationDevice();
                         /* deviceType == BluetoothDeviceManager.DEVICE_TYPE_HEARING_AID */
                         if (!isHearingAidSetForCommunication) {
@@ -389,7 +394,8 @@ public class BluetoothStateReceiver extends BroadcastReceiver {
         mBluetoothRouteManager = routeManager;
         mCommunicationDeviceTracker = communicationDeviceTracker;
         mFeatureFlags = featureFlags;
-        // Indication that SCO is managed by audio (i.e. supports setCommunicationDevice).
+        // Indication that SCO is managed by audio (i.e. supports
+        // setCommunicationDevice).
         mIsScoManagedByAudio = android.media.audio.Flags.scoManagedByAudio()
                 && BluetoothProperties.isScoManagedByAudioEnabled().orElse(false);
     }

@@ -2076,10 +2076,6 @@ public class CallAudioRouteStateMachine extends StateMachine implements CallAudi
     }
 
     private boolean isWatchActiveOrOnlyWatchesAvailable() {
-        if (!mFeatureFlags.ignoreAutoRouteToWatchDevice()) {
-            Log.i(this, "isWatchActiveOrOnlyWatchesAvailable: Flag is disabled.");
-            return false;
-        }
 
         boolean containsWatchDevice = false;
         boolean containsNonWatchDevice = false;

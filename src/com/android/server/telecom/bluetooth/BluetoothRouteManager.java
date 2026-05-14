@@ -895,7 +895,7 @@ public class BluetoothRouteManager extends StateMachine {
                     + " Using arbitrary device - except watch");
             if (deviceList.size() > 0) {
                 for (BluetoothDevice device : deviceList) {
-                    if (mFeatureFlags.ignoreAutoRouteToWatchDevice() && isWatch(device)) {
+                    if (isWatch(device)) {
                         Log.i(this, "Skipping a watch device: " + device);
                         continue;
                     }
@@ -1022,7 +1022,7 @@ public class BluetoothRouteManager extends StateMachine {
                     + " Using arbitrary device - except watch");
             if (deviceList.size() > 0) {
                 for (BluetoothDevice device : deviceList) {
-                    if (mFeatureFlags.ignoreAutoRouteToWatchDevice() && isWatch(device)) {
+                    if (isWatch(device)) {
                         Log.i(this, "Skipping a watch device: " + device);
                         continue;
                     }
